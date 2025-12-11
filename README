@@ -1,0 +1,215 @@
+Chat Service - Cloud Architecture
+
+This project implements a fully serverless and containerized asynchronous chat message pipeline running on AWS.
+
+The system is designed using production-grade cloud architecture patterns:
+
+- Event-driven processing
+- Full decoupling between API and worker
+- Container orchestration using ECS Fargate
+- Serverless background processing with Lambda
+- Scalable, reliable queueing with SQS
+- NoSQL storage using DynamoDB
+
+The final result is a microservice that:
+
+1. Accepts chat messages via a public FastAPI endpoint
+2. Sends messages to SQS
+3. Processes them asynchronously using a Lambda worker
+4. Stores data in DynamoDB
+5. Exposes a GET endpoint to retrieve all stored messages
+
+Architecture Diagram
+                ┌────────────────────────────┐
+                │        Client / User       │
+                │  (Swagger UI, CURL, etc.)  │
+                └──────────────┬─────────────┘
+                               |  HTTP (POST/GET)
+                               ▼
+                    ┌─────────────────────┐
+                    │ Application Load    │
+                    │      Balancer       │
+                    └──────────┬──────────┘
+                               |
+                               |  Routes to ECS
+                               ▼
+                    ┌───────────────────────┐
+                    │     ECS Fargate       │
+                    │  FastAPI "chat-api"   │
+                    └──────────┬────────────┘
+                               |
+                               |  POST → SQS Queue
+                               ▼
+                    ┌──────────────────────┐
+                    │     AWS SQS Queue    │
+                    └──────────┬───────────┘
+                               │ event trigger
+                               ▼
+                    ┌────────────────────────┐
+                    │    AWS Lambda Worker   │
+                    │ Processes messages and │
+                    │   writes DynamoDB      │
+                    └──────────┬─────────────┘
+                               |
+                               |  Write / Scan
+                               ▼
+                    ┌──────────────────────┐
+                    │   DynamoDB Table     │
+                    │ chat-service-messages│
+                    └──────────────────────┘
+
+Technologies Used
+    AWS Services:
+
+    - ECS Fargate — Runs the FastAPI API without managing servers
+    - ECR — Stores versioned Docker images
+    - SQS — Message queue for asynchronous processing
+    - Lambda — Worker function triggered by SQS
+    - DynamoDB — NoSQL database for message storage
+    - ALB (Application Load Balancer) — Public entrypoint to ECS API
+    - IAM — Roles and permissions for ECS + Lambda
+    - CloudWatch Logs — Logging for ECS tasks and Lambda functions
+
+    Project Technologies:
+
+    - Python 3.12
+    - FastAPI (REST API)
+    - Docker (containerization)
+    - Terraform (infrastructure-as-code)
+    - boto3 (AWS SDK)
+    - Uvicorn (ASGI server)
+
+API Endpoints
+    - POST /messages
+
+    - Queues a new chat message into SQS.
+
+    - Request:
+    {
+      "user": "Username",
+      "text": "The message content"
+    }
+
+  - user defaults to "anonymous".
+
+  - Response:
+    {
+      "message_id": "<uuid>",
+      "status": "queued"
+    }
+
+- GET /messages
+
+  - Retrieves the latest 50 messages from DynamoDB.
+
+  - Example response:
+    [
+      {
+        "id": "message-uuid",
+        "user": "Username",
+        "text": "The message content",
+        "timestamp": 1700000000
+      }
+      , ...
+    ]
+
+Infrastructure Overview (Terraform)
+
+    Terraform provisions the following:
+
+    Compute:
+    - ECS Cluster
+    - ECS Service (Fargate)
+    - ECS Task Definition (FastAPI container)
+
+    Networking:
+    - Application Load Balancer
+    - Target Group
+    - Listener
+    - Security groups
+
+    Storage + Processing:
+    - DynamoDB table
+    - SQS queue
+    - Lambda function + SQS event trigger
+
+    IAM:
+    - ECS execution role
+    - ECS task role (read DynamoDB + write SQS)
+    - Lambda role (write DynamoDB + CloudWatch logging)
+
+Local Development Setup
+    1) Install Required Tools
+
+    - Python 3.12
+    - Docker Desktop
+    - AWS CLI
+    - Terraform
+    - pip / venv
+
+    2) Run the FastAPI Service Locally
+
+    cd api
+    python -m venv .venv
+    source .venv/bin/activate   # Windows: .venv\Scripts\activate
+    pip install -r requirements.txt
+    uvicorn app.main:app --reload --port 8000
+
+    Local Swagger UI:
+    http://localhost:8000/docs
+
+    3) Build & Test Docker Image
+
+    docker build -t chat-api:local .
+    docker run -p 8000:8000 chat-api:local
+
+    4) Push Docker Image to ECR
+
+    aws ecr get-login-password --region eu-west-1 | docker login --username AWS --password-stdin <ACCOUNT>.dkr.ecr.eu-west-1.amazonaws.com
+    docker tag chat-api:local <REPO_URL>:v1
+    docker push <REPO_URL>:v1
+
+    5) Deploy Infrastructure (Terraform)
+
+    cd infra/terraform
+    terraform init
+    terraform plan
+    terraform apply
+
+    6) After Deployment
+
+    Terraform outputs:
+
+    - alb_dns_name = "chat-service-alb-xxxxx.eu-west-1.elb.amazonaws.com"
+    - sqs_url      = "https://sqs.eu-west-1.amazonaws.com/.../chat-service-queue"
+    - ecr_repo_url = "9949xxxxx.dkr.ecr.eu-west-1.amazonaws.com/chat-service-api"
+
+    7) Test the System
+
+    API Root:
+    http://chat-service-alb-xxxxx.eu-west-1.elb.amazonaws.com/
+
+    Swagger UI:
+    http://chat-service-alb-xxxxx.eu-west-1.elb.amazonaws.com/docs
+
+    POST a message:
+    curl -X POST "http://<ALB>/messages" \
+    -H "Content-Type: application/json" \
+    -d '{"user":"Username","text":"Testing pipeline"}'
+
+
+    GET messages:
+    curl "http://<ALB>/messages"
+
+CloudWatch Logging
+
+    Logs are stored inside AWS CloudWatch.
+
+    Log groups:
+
+    - /ecs/chat-api → ECS FastAPI container logs
+    - /aws/lambda/chat-service-worker → Lambda worker logs
+
+    You can view them at:
+
+    AWS Console → CloudWatch → Log Groups
