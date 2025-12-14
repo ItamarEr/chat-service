@@ -15,7 +15,7 @@ resource "aws_ecs_task_definition" "chat_api" {
   container_definitions = jsonencode([
     {
       name      = "chat-api"
-      image     = "${aws_ecr_repository.chat_api.repository_url}:v2"
+      image     = "${aws_ecr_repository.chat_api.repository_url}:v1"
       essential = true
 
       portMappings = [

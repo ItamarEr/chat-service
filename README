@@ -138,16 +138,36 @@ Infrastructure Overview (Terraform)
     - ECS task role (read DynamoDB + write SQS)
     - Lambda role (write DynamoDB + CloudWatch logging)
 
+Testing the Deployed System (Recommended):
+
+The fully deployed system can be tested using the public Swagger UI:
+
+http://chat-service-alb-890477524.eu-west-1.elb.amazonaws.com/docs
+
+From the Swagger UI you can:
+- Send messages using `POST /messages`
+- Retrieve stored messages using `GET /messages`
+
+This endpoint is publicly accessible and works from any machine without
+local AWS credentials.
+
+
 Local Development Setup
     1) Install Required Tools
-
+    - AWS account
+    - IAM user or role with administrator permissions
     - Python 3.12
     - Docker Desktop
     - AWS CLI
     - Terraform
     - pip / venv
-
-    2) Run the FastAPI Service Locally
+    
+    2) Package the Lambda Worker
+    cd worker
+    pip install -r requirements.txt -t .
+    zip -r lambda.zip .
+    
+    3) Run the FastAPI Service Locally
 
     cd api
     python -m venv .venv
@@ -158,25 +178,25 @@ Local Development Setup
     Local Swagger UI:
     http://localhost:8000/docs
 
-    3) Build & Test Docker Image
+    4) Build & Test Docker Image
 
     docker build -t chat-api:local .
     docker run -p 8000:8000 chat-api:local
 
-    4) Push Docker Image to ECR
+    5) Push Docker Image to ECR
 
     aws ecr get-login-password --region eu-west-1 | docker login --username AWS --password-stdin <ACCOUNT>.dkr.ecr.eu-west-1.amazonaws.com
     docker tag chat-api:local <REPO_URL>:v1
     docker push <REPO_URL>:v1
 
-    5) Deploy Infrastructure (Terraform)
+    6) Deploy Infrastructure (Terraform)
 
     cd infra/terraform
     terraform init
     terraform plan
     terraform apply
 
-    6) After Deployment
+    7) After Deployment
 
     Terraform outputs:
 
@@ -184,7 +204,7 @@ Local Development Setup
     - sqs_url      = "https://sqs.eu-west-1.amazonaws.com/.../chat-service-queue"
     - ecr_repo_url = "9949xxxxx.dkr.ecr.eu-west-1.amazonaws.com/chat-service-api"
 
-    7) Test the System
+    8) Test the System
 
     API Root:
     http://chat-service-alb-xxxxx.eu-west-1.elb.amazonaws.com/
@@ -213,3 +233,4 @@ CloudWatch Logging
     You can view them at:
 
     AWS Console → CloudWatch → Log Groups
+
